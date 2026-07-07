@@ -47,20 +47,16 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // إعداد الخريطة
         const map = L.map('map').setView([15.3694, 44.1910], 13);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png').addTo(map);
 
         document.getElementById("today-date").innerText = new Date().toLocaleDateString();
 
-        // الاستماع للبلاغات
         const q = query(collection(db, "reports"), where("timestamp", ">=", new Date(Date.now() - 24 * 60 * 60 * 1000)));
 
         onSnapshot(q, async (snapshot) => {
             const container = document.getElementById("reports-container");
             container.innerHTML = "";
-            
-            // تنظيف الخريطة من العلامات القديمة
             map.eachLayer((layer) => { if (layer instanceof L.Marker) map.removeLayer(layer); });
 
             for (const doc of snapshot.docs) {
@@ -68,14 +64,15 @@
                 if (data.location) {
                     L.marker([data.location.latitude, data.location.longitude]).addTo(map).bindPopup(data.type);
                     
-                    // محاولة جلب اسم المنطقة مع حماية الكود من التوقف
-                    let areaName = "جاري تحديد الموقع...";
+                    // تحسين جلب العنوان
+                    let areaName = "جاري التحميل...";
                     try {
-                        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${data.location.latitude}&lon=${data.location.longitude}`);
+                        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${data.location.latitude}&lon=${data.location.longitude}&accept-language=ar`);
                         const addr = await response.json();
-                        areaName = addr.display_name ? addr.display_name.split(',')[0] : "موقع غير معروف";
+                        // نستخدم displayName الكامل إذا لم يوجد اسم مدينة محدد
+                        areaName = addr.display_name || "موقع محدد";
                     } catch (e) {
-                        areaName = "موقع غير معروف";
+                        areaName = "إحداثيات: " + data.location.latitude.toFixed(4);
                     }
                     
                     const div = document.createElement("div");
@@ -89,7 +86,6 @@
             }
         });
 
-        // زر الإبلاغ
         document.getElementById("report-btn").addEventListener("click", () => {
             navigator.geolocation.getCurrentPosition(async (pos) => {
                 await addDoc(collection(db, "reports"), {
