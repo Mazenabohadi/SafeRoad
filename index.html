@@ -2,100 +2,117 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>SafeRoad - لوحة التحكم</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام SafeRoad</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
     <style>
-        body { font-family: sans-serif; padding: 10px; }
-        #map { height: 400px; width: 100%; border-radius: 10px; margin-top: 10px; }
-        .control-box { padding: 15px; background: #f4f4f4; border-radius: 10px; }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: sans-serif; }
+        #map { height: 100vh; width: 100%; z-index: 1; }
+        .control-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+        #report-btn {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: bold;
+        }
+        #report-btn:hover { background-color: #a71d2a; }
     </style>
 </head>
 <body>
 
-    <div class="control-box">
-        <h2>نظام SafeRoad</h2>
-        <button id="report-btn" style="padding: 10px 20px; font-size: 16px;">🚨 إبلاغ عن حادث/عائق</button>
+    <div class="control-panel">
+        <h2 style="margin: 0 0 10px 0; font-size: 18px;">SafeRoad - نظام البلاغات</h2>
+        <button id="report-btn">🚨 إبلاغ عن حادث/عائق</button>
     </div>
 
     <div id="map"></div>
 
-    <script type="module">
-                import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
-        
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-        // *** يجب تعبئة بيانات Firebase الخاصة بك هنا ***
-        const firebaseConfig = {  apiKey: "AIzaSyDwFAzkfJ1-67tuUkGPk7RJno1JJsHAfJc",
-  authDomain: "saferoad-dc91b.firebaseapp.com",
-  projectId: "saferoad-dc91b",
-  storageBucket: "saferoad-dc91b.firebasestorage.app",
-  messagingSenderId: "422753487233",
-  appId: "1:422753487233:web:6ea75b9918366bc8e04080"};
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+
+        // إعدادات Firebase
+        const firebaseConfig = {
+            apiKey: "AizaSyDwFazkFJ-67tuUkGFK7Rjno1jJsHAFJc",
+            authDomain: "saferoad-dc91b.firebaseapp.com",
+            projectId: "saferoad-dc91b",
+            storageBucket: "saferoad-dc91b.appspot.com",
+            messagingSenderId: "422753487233",
+            appId: "1:422753487233:web:6ea75b9918366bc8e04080"
+        };
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // 1. تهيئة الخريطة (مركزها صنعاء كمثال)
+        // تهيئة الخريطة
         const map = L.map('map').setView([15.3694, 44.1910], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-                // 2. قراءة بلاغات آخر 24 ساعة فقط
-        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000); 
+        // استعلام البلاغات (آخر 24 ساعة فقط)
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
         const q = query(collection(db, "reports"), where("timestamp", ">=", oneDayAgo));
-        
+
+        // الاستماع اللحظي للبيانات
         onSnapshot(q, (snapshot) => {
+            // تنظيف الخريطة أولاً
             map.eachLayer((layer) => {
                 if (layer instanceof L.Marker) {
                     map.removeLayer(layer);
                 }
             });
 
+            // رسم البلاغات
             snapshot.forEach((doc) => {
                 const data = doc.data();
-                if(data.location) {
+                if (data.location) {
                     L.marker([data.location.latitude, data.location.longitude])
                      .addTo(map)
                      .bindPopup(`نوع البلاغ: ${data.type}`);
                 }
             });
         });
-                   
-        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000); 
-        const q = query(collection(db, "reports"), where("timestamp", ">=", oneDayAgo));
-        
-        onSnapshot(q, (snapshot) => {
-            // تنظيف الخريطة من الدبابيس القديمة
-            map.eachLayer((layer) => {
-                if (layer instanceof L.Marker) {
-                    map.removeLayer(layer);
-                }
-            });
 
-            // رسم البلاغات الجديدة فقط
-            snapshot.forEach((doc) => {
-                const data = doc.data();
-                if(data.location) {
-                    L.marker([data.location.latitude, data.location.longitude])
-                     .addTo(map)
-                     .bindPopup(`نوع البلاغ: ${data.type}`);
-                }
-            });
-        });
-                                   
-        
-        // 3. وظيفة زر الإبلاغ
+        // وظيفة الإبلاغ
         document.getElementById("report-btn").addEventListener("click", () => {
-            navigator.geolocation.getCurrentPosition(async (position) => {
-                const { latitude, longitude } = position.coords;
-                await addDoc(collection(db, "reports"), {
-                    type: "حادث",
-                    location: { latitude, longitude },
-                    timestamp: serverTimestamp()
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(async (position) => {
+                    try {
+                        await addDoc(collection(db, "reports"), {
+                            type: "حادث/عائق",
+                            location: {
+                                latitude: position.coords.latitude,
+                                longitude: position.coords.longitude
+                            },
+                            timestamp: serverTimestamp()
+                        });
+                        alert("تم إرسال البلاغ بنجاح!");
+                    } catch (e) {
+                        alert("حدث خطأ أثناء الإرسال");
+                    }
+                }, () => {
+                    alert("يرجى تفعيل الموقع الجغرافي");
                 });
-                alert("تم إرسال البلاغ بنجاح!");
-            });
+            } else {
+                alert("متصفحك لا يدعم تحديد الموقع");
+            }
         });
     </script>
 </body>
