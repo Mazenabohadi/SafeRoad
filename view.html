@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>البلاغات المباشرة - SafeRoad</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .report { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h1>البلاغات النشطة</h1>
+    <div id="reports-list">جاري تحميل البلاغات...</div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getFirestore, collection, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+
+        // *** هام: ضع إعدادات Firebase الخاصة بمشروعك هنا ***
+        const firebaseConfig = { apiKey: "AIzaSyDwFAzkfJ1-67tuUkGPk7RJno1JJsHAfJc",
+  authDomain: "saferoad-dc91b.firebaseapp.com",
+  projectId: "saferoad-dc91b",
+  storageBucket: "saferoad-dc91b.firebasestorage.app",
+  messagingSenderId: "422753487233",
+  appId: "1:422753487233:web:6ea75b9918366bc8e04080 };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const reportsRef = collection(db, "reports");
+        const q = query(reportsRef, orderBy("timestamp", "desc"));
+
+        onSnapshot(q, (snapshot) => {
+            const list = document.getElementById("reports-list");
+            list.innerHTML = "";
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                const div = document.createElement("div");
+                div.className = "report";
+                div.innerHTML = `<strong>${data.type}</strong><br>
+                                 الوقت: ${new Date(data.timestamp.seconds * 1000).toLocaleString()}`;
+                list.appendChild(div);
+            });
+        });
+    </script>
+</body>
+</html>
+
