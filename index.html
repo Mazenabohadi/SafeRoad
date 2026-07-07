@@ -22,8 +22,9 @@
     <div id="map"></div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-        import { , addDoc, onSnapshot, query, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+                import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+        
 
         // *** يجب تعبئة بيانات Firebase الخاصة بك هنا ***
         const firebaseConfig = {  apiKey: "AIzaSyDwFAzkfJ1-67tuUkGPk7RJno1JJsHAfJc",
@@ -40,9 +41,17 @@
         const map = L.map('map').setView([15.3694, 44.1910], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-        // 2. قراءة البلاغات ووضعها على الخريطة
-                // 2. قراءة البلاغات ووضعها على الخريطة
-        onSnapshot(collection(db, "reports"), (snapshot) => {
+                // 2. قراءة بلاغات آخر 24 ساعة فقط
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000); 
+        const q = query(collection(db, "reports"), where("timestamp", ">=", oneDayAgo));
+        
+        onSnapshot(q, (snapshot) => {
+            map.eachLayer((layer) => {
+                if (layer instanceof L.Marker) {
+                    map.removeLayer(layer);
+                }
+            });
+
             snapshot.forEach((doc) => {
                 const data = doc.data();
                 if(data.location) {
@@ -52,6 +61,29 @@
                 }
             });
         });
+                   
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000); 
+        const q = query(collection(db, "reports"), where("timestamp", ">=", oneDayAgo));
+        
+        onSnapshot(q, (snapshot) => {
+            // تنظيف الخريطة من الدبابيس القديمة
+            map.eachLayer((layer) => {
+                if (layer instanceof L.Marker) {
+                    map.removeLayer(layer);
+                }
+            });
+
+            // رسم البلاغات الجديدة فقط
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                if(data.location) {
+                    L.marker([data.location.latitude, data.location.longitude])
+                     .addTo(map)
+                     .bindPopup(`نوع البلاغ: ${data.type}`);
+                }
+            });
+        });
+                                   
         
         // 3. وظيفة زر الإبلاغ
         document.getElementById("report-btn").addEventListener("click", () => {
