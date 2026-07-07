@@ -41,6 +41,7 @@
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
         // 2. قراءة البلاغات ووضعها على الخريطة
+                // 2. قراءة البلاغات ووضعها على الخريطة
         onSnapshot(collection(db, "reports"), (snapshot) => {
             snapshot.forEach((doc) => {
                 const data = doc.data();
@@ -51,7 +52,7 @@
                 }
             });
         });
-
+        
         // 3. وظيفة زر الإبلاغ
         document.getElementById("report-btn").addEventListener("click", () => {
             navigator.geolocation.getCurrentPosition(async (position) => {
