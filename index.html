@@ -13,6 +13,8 @@
         .feedback-area { padding: 15px; background: #fff; margin-top: 10px; }
         textarea { width: 100%; height: 60px; border: 1px solid #ddd; border-radius: 5px; padding: 5px; box-sizing: border-box; }
         #send-feedback { background-color: #28a745; color: white; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; margin-top: 5px; }
+        .report-list { padding: 20px; background: white; margin-top: 10px; }
+        .report-card { background: #fff8f8; padding: 15px; margin-bottom: 10px; border-radius: 8px; border-right: 5px solid #dc3545; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     </style>
 </head>
 <body>
@@ -28,6 +30,11 @@
     </div>
 
     <div id="map"></div>
+
+    <div class="report-list">
+        <h3>بلاغات هذا اليوم</h3>
+        <div id="reports-container"></div>
+    </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -47,13 +54,17 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // إعداد الخريطة بمصدر CartoDB Voyager (مظهر طبيعي وجذاب)
-        const map = L.map('map').setView([15.3694, 44.1910], 12);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', {
-            attribution: '&copy; CartoDB'
-        }).addTo(map);
+        // أيقونة حمراء للحوادث
+        const redIcon = new L.Icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
 
-        // تحديد موقع المستخدم
+        const map = L.map('map').setView([15.3694, 44.1910], 12);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png').addTo(map);
+
+        // إضافة موقع المستخدم (دبوس أزرق)
         map.locate({setView: true, maxZoom: 14});
         map.on('locationfound', (e) => {
             L.circleMarker(e.latlng, {radius: 8, color: 'blue', fillColor: 'blue', fillOpacity: 1})
@@ -65,14 +76,29 @@
         const q = query(collection(db, "reports"), where("timestamp", ">=", new Date(Date.now() - 24 * 60 * 60 * 1000)));
 
         onSnapshot(q, (snapshot) => {
-            map.eachLayer((layer) => { if (layer instanceof L.Marker) map.removeLayer(layer); });
+            const container = document.getElementById("reports-container");
+            container.innerHTML = ""; // إفراغ القائمة
+            
+            // إزالة الدبابيس القديمة فقط
+            map.eachLayer((layer) => { if (layer instanceof L.Marker && layer.options.icon === redIcon) map.removeLayer(layer); });
 
-            snapshot.docs.forEach((doc) => {
-                const data = doc.data();
-                if (data.location) {
-                    L.marker([data.location.latitude, data.location.longitude]).addTo(map).bindPopup("حادث هنا");
-                }
-            });
+            if (snapshot.empty) {
+                container.innerHTML = "<p style='color:gray;'>لا توجد بلاغات في آخر 24 ساعة.</p>";
+            } else {
+                snapshot.docs.forEach((doc) => {
+                    const data = doc.data();
+                    if (data.location) {
+                        // إضافة دبوس أحمر
+                        L.marker([data.location.latitude, data.location.longitude], {icon: redIcon}).addTo(map).bindPopup("حادث");
+                        
+                        // إضافة بطاقة للقائمة
+                        const div = document.createElement("div");
+                        div.className = "report-card";
+                        div.innerHTML = `<strong>📍 بلاغ حادث</strong><br><small>الوقت: ${data.timestamp ? data.timestamp.toDate().toLocaleTimeString() : "الآن"}</small>`;
+                        container.appendChild(div);
+                    }
+                });
+            }
         });
 
         // إرسال التعليق
@@ -81,7 +107,7 @@
             if(!comment) return alert("اكتب تعليقاً أولاً!");
             await addDoc(collection(db, "feedback"), { comment, timestamp: serverTimestamp() });
             document.getElementById("feedback-text").value = "";
-            alert("شكراً لملاحظاتك! لقد وصلت للمسؤولين.");
+            alert("تم إرسال تعليقك بنجاح!");
         });
 
         // زر الإبلاغ
@@ -92,7 +118,7 @@
                     location: { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
                     timestamp: serverTimestamp()
                 });
-                alert("تم الإبلاغ بنجاح!");
+                alert("تم الإبلاغ!");
             });
         });
     </script>
