@@ -47,7 +47,7 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        const map = L.map('map').setView([15.3694, 44.1910], 13);
+        const map = L.map('map').setView([15.3694, 44.1910], 7); // زوم أبعد قليلاً
         L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png').addTo(map);
 
         document.getElementById("today-date").innerText = new Date().toLocaleDateString();
@@ -59,30 +59,38 @@
             container.innerHTML = "";
             map.eachLayer((layer) => { if (layer instanceof L.Marker) map.removeLayer(layer); });
 
-            for (const doc of snapshot.docs) {
+            let markerCoords = [];
+
+            snapshot.docs.forEach((doc) => {
                 const data = doc.data();
                 if (data.location) {
-                    L.marker([data.location.latitude, data.location.longitude]).addTo(map).bindPopup(data.type);
+                    const lat = data.location.latitude;
+                    const lon = data.location.longitude;
                     
-                    // تحسين جلب العنوان
-                    let areaName = "جاري التحميل...";
-                    try {
-                        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${data.location.latitude}&lon=${data.location.longitude}&accept-language=ar`);
-                        const addr = await response.json();
-                        // نستخدم displayName الكامل إذا لم يوجد اسم مدينة محدد
-                        areaName = addr.display_name || "موقع محدد";
-                    } catch (e) {
-                        areaName = "إحداثيات: " + data.location.latitude.toFixed(4);
-                    }
-                    
+                    // 1. رسم الدبوس فوراً (لا يوجد await هنا)
+                    const marker = L.marker([lat, lon]).addTo(map).bindPopup(data.type);
+                    markerCoords.push([lat, lon]);
+
+                    // 2. تحديث القائمة فوراً
                     const div = document.createElement("div");
                     div.className = "report-card";
-                    div.innerHTML = `
-                        <strong>📍 ${areaName}</strong><br>
-                        <small>الوقت: ${data.timestamp ? data.timestamp.toDate().toLocaleTimeString() : "الآن"}</small>
-                    `;
+                    div.id = "card-" + doc.id;
+                    div.innerHTML = `<strong>📍 جاري تحديد المنطقة...</strong><br><small>الوقت: ${data.timestamp ? data.timestamp.toDate().toLocaleTimeString() : "الآن"}</small>`;
                     container.appendChild(div);
+
+                    // 3. جلب العنوان في الخلفية (Background Task)
+                    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=ar`)
+                        .then(res => res.json())
+                        .then(addr => {
+                            const card = document.getElementById("card-" + doc.id);
+                            if(card) card.querySelector("strong").innerText = "📍 " + (addr.display_name || "موقع محدد");
+                        }).catch(() => {});
                 }
+            });
+
+            // 4. ضبط الخريطة لتشمل كل النقاط
+            if (markerCoords.length > 0) {
+                map.fitBounds(markerCoords, { padding: [20, 20] });
             }
         });
 
@@ -93,9 +101,7 @@
                     location: { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
                     timestamp: serverTimestamp()
                 });
-                alert("تم إرسال البلاغ بنجاح!");
-            }, (err) => {
-                alert("يجب تفعيل الموقع لتتمكن من الإبلاغ.");
+                alert("تم الإرسال!");
             });
         });
     </script>
