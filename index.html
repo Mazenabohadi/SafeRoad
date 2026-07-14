@@ -3,138 +3,127 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SafeRoad - النظام الذكي</title>
+    <title>SafeRoad Pro</title>
+    <!-- تحميل مكتبات Firebase -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <style>
-        body { margin: 0; padding: 0; font-family: sans-serif; background: #f4f4f4; }
-        .control-panel { padding: 15px; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; }
-        #report-btn { background-color: #dc3545; color: white; border: none; padding: 12px 25px; border-radius: 8px; font-size: 16px; cursor: pointer; width: 100%; max-width: 300px; }
-        #map { height: 400px; width: 100%; z-index: 1; }
-        .feedback-area { padding: 15px; background: #fff; margin-top: 10px; }
-        textarea { width: 100%; height: 60px; border: 1px solid #ddd; border-radius: 5px; padding: 5px; box-sizing: border-box; }
-        #send-feedback { background-color: #28a745; color: white; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; margin-top: 5px; }
-        .report-list { padding: 20px; background: white; margin-top: 10px; }
-        .report-card { background: #fff8f8; padding: 15px; margin-bottom: 10px; border-radius: 8px; border-right: 5px solid #dc3545; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        body { font-family: sans-serif; margin: 0; background: #f4f4f4; text-align: center; }
+        #auth-ui, #map-ui { padding: 20px; }
+        #map { height: 400px; width: 100%; border-radius: 10px; }
+        .hidden { display: none; }
+        #recaptcha-container { margin: 15px auto; }
+        .admin-btn { background: #dc3545; color: white; border: none; padding: 8px; cursor: pointer; border-radius: 5px; margin-top: 5px; }
+        button { padding: 10px 20px; cursor: pointer; border-radius: 5px; border: none; background: #007bff; color: white; }
     </style>
 </head>
 <body>
 
-    <div class="control-panel">
-        <strong>SafeRoad - لوحة التحكم</strong>
-        <br><br>
-        <button id="report-btn">🚨 إبلاغ عن حادث</button>
-        <div class="feedback-area">
-            <textarea id="feedback-text" placeholder="أرسل تعليقك لتحسين الموقع..."></textarea>
-            <button id="send-feedback">إرسال التعليق</button>
+    <!-- واجهة التسجيل -->
+    <div id="auth-ui">
+        <h3>تسجيل الدخول في SafeRoad</h3>
+        <input type="tel" id="phone" placeholder="+967xxxxxxxxx" style="padding: 10px; width: 80%; max-width: 300px;">
+        <div id="recaptcha-container"></div>
+        <button id="send-otp">إرسال كود التحقق</button>
+        <div id="otp-area" class="hidden">
+            <input type="text" id="otp-code" placeholder="أدخل كود التفعيل" style="padding: 10px; margin-top: 10px;">
+            <br>
+            <button id="verify-otp" style="margin-top: 10px;">تأكيد الدخول</button>
         </div>
     </div>
 
-    <div id="map"></div>
-
-    <div class="report-list">
-        <h3>بلاغات هذا اليوم</h3>
-        <div id="reports-container"></div>
+    <!-- واجهة الخريطة -->
+    <div id="map-ui" class="hidden">
+        <div id="map"></div>
+        <button id="report-btn" style="background:#28a745; margin-top: 15px;">🚨 إبلاغ عن حادث/عائق</button>
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, where, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
-
+    <script>
+        // إعداد Firebase الخاص بك
         const firebaseConfig = {
-            apiKey: "AizaSyDwFazkFJ-67tuUkGFK7Rjno1jJsHAFJc",
+            apiKey: "AIzaSyDwFAzkfJ1-67tuUkGPk7RJno1JJsHAfJc",
             authDomain: "saferoad-dc91b.firebaseapp.com",
             projectId: "saferoad-dc91b",
-            storageBucket: "saferoad-dc91b.appspot.com",
+            storageBucket: "saferoad-dc91b.firebasestorage.app",
             messagingSenderId: "422753487233",
             appId: "1:422753487233:web:6ea75b9918366bc8e04080"
         };
+        firebase.initializeApp(firebaseConfig);
+        
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const ADMIN_PHONE = "+967xxxxxxxxx"; // **[هام]: ضع رقم هاتفك الدولي هنا للأدمن**
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
+        // 1. نظام تسجيل الدخول
+        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 'size': 'invisible' });
+        
+        document.getElementById('send-otp').onclick = () => {
+            const phone = document.getElementById('phone').value;
+            auth.signInWithPhoneNumber(phone, window.recaptchaVerifier).then(confirmationResult => {
+                window.confirmationResult = confirmationResult;
+                document.getElementById('otp-area').classList.remove('hidden');
+                alert("تم إرسال كود التحقق!");
+            }).catch(e => alert("خطأ: " + e.message));
+        };
 
-        // أيقونة حمراء للحوادث
-        const redIcon = new L.Icon({
-            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
-        });
+        document.getElementById('verify-otp').onclick = () => {
+            window.confirmationResult.confirm(document.getElementById('otp-code').value).then(() => {
+                location.reload();
+            }).catch(e => alert("كود خاطئ!"));
+        };
 
-        const map = L.map('map').setView([15.3694, 44.1910], 12);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png').addTo(map);
-
-        // موقع المستخدم (أزرق)
-        map.locate({setView: true, maxZoom: 14});
-        map.on('locationfound', (e) => {
-            L.circleMarker(e.latlng, {radius: 8, color: 'blue', fillColor: 'blue', fillOpacity: 1})
-             .addTo(map)
-             .bindPopup("أنت هنا");
-        });
-
-        // الاستماع للبلاغات
-        const q = query(collection(db, "reports"), where("timestamp", ">=", new Date(Date.now() - 24 * 60 * 60 * 1000)));
-
-        onSnapshot(q, (snapshot) => {
-            const container = document.getElementById("reports-container");
-            container.innerHTML = ""; 
-            map.eachLayer((layer) => { if (layer instanceof L.Marker && layer.options.icon === redIcon) map.removeLayer(layer); });
-
-            if (snapshot.empty) {
-                container.innerHTML = "<p style='color:gray;'>لا توجد بلاغات في آخر 24 ساعة.</p>";
-            } else {
-                snapshot.docs.forEach((doc) => {
-                    const data = doc.data();
-                    if (data.location) {
-                        L.marker([data.location.latitude, data.location.longitude], {icon: redIcon}).addTo(map).bindPopup("حادث");
-                        const div = document.createElement("div");
-                        div.className = "report-card";
-                        div.innerHTML = `<strong>📍 بلاغ حادث</strong><br><small>الوقت: ${data.timestamp ? data.timestamp.toDate().toLocaleTimeString() : "الآن"}</small>`;
-                        container.appendChild(div);
-                    }
-                });
+        // 2. التحقق من حالة الدخول وعرض الخريطة
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                document.getElementById('auth-ui').classList.add('hidden');
+                document.getElementById('map-ui').classList.remove('hidden');
+                initMap(user.phoneNumber);
             }
         });
 
-        // إرسال التعليق
-        document.getElementById("send-feedback").addEventListener("click", async () => {
-            const comment = document.getElementById("feedback-text").value;
-            if(!comment) return alert("اكتب تعليقاً أولاً!");
-            await addDoc(collection(db, "feedback"), { comment, timestamp: serverTimestamp() });
-            document.getElementById("feedback-text").value = "";
-            alert("شكراً لملاحظاتك!");
-        });
+        // 3. الخريطة والتنبيهات
+        function initMap(userPhone) {
+            const map = L.map('map').setView([15.3694, 44.1910], 12);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png').addTo(map);
 
-        // زر الإبلاغ مع خاصية منع التكرار
-        document.getElementById("report-btn").addEventListener("click", () => {
-            navigator.geolocation.getCurrentPosition(async (pos) => {
-                const lat = pos.coords.latitude;
-                const lon = pos.coords.longitude;
-                const latRound = lat.toFixed(3);
-                const lonRound = lon.toFixed(3);
-
-                // فحص هل يوجد بلاغ مكرر اليوم؟
-                const querySnapshot = await getDocs(q);
-                let isDuplicate = false;
-                querySnapshot.forEach((doc) => {
+            // جلب البلاغات
+            db.collection("reports").onSnapshot(snap => {
+                snap.forEach(doc => {
                     const data = doc.data();
-                    if (data.location.latitude.toFixed(3) === latRound && data.location.longitude.toFixed(3) === lonRound) {
-                        isDuplicate = true;
+                    const marker = L.marker([data.location.latitude, data.location.longitude]).addTo(map);
+                    
+                    // زر الحذف للأدمن فقط
+                    if (userPhone === ADMIN_PHONE) {
+                        marker.bindPopup(`<b>${data.type}</b><br><button class="admin-btn" onclick="deleteReport('${doc.id}')">حذف البلاغ</button>`);
                     }
                 });
-
-                if (isDuplicate) {
-                    alert("⚠️ تم الإبلاغ عن هذا المكان مسبقاً اليوم، لا داعي للتكرار!");
-                } else {
-                    await addDoc(collection(db, "reports"), {
-                        type: "حادث",
-                        location: { latitude: lat, longitude: lon },
-                        timestamp: serverTimestamp()
-                    });
-                    alert("تم الإبلاغ بنجاح!");
-                }
             });
-        });
+
+            // تتبع المستخدم والتنبيه
+            navigator.geolocation.watchPosition(pos => {
+                const lat = pos.coords.latitude;
+                const lng = pos.coords.longitude;
+                
+                db.collection("reports").get().then(snap => {
+                    snap.forEach(doc => {
+                        const r = doc.data().location;
+                        const dist = Math.sqrt(Math.pow(r.latitude-lat, 2) + Math.pow(r.longitude-lng, 2)) * 111000;
+                        if (dist < 500) {
+                            new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play();
+                        }
+                    });
+                });
+            }, null, { enableHighAccuracy: true });
+        }
+
+        // دالة الحذف للأدمن
+        window.deleteReport = (id) => {
+            if(confirm("هل تريد حذف هذا البلاغ؟")) {
+                db.collection("reports").doc(id).delete().then(() => location.reload());
+            }
+        };
     </script>
 </body>
 </html>
