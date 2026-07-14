@@ -11,26 +11,19 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; background: #f4f4f4; text-align: center; }
-        #auth-ui, #map-ui { padding: 20px; }
+        #auth-ui, #map-ui { padding: 40px; }
         #map { height: 500px; width: 100%; border-radius: 10px; margin-top: 10px; }
         .hidden { display: none; }
-        button { padding: 10px 20px; cursor: pointer; border-radius: 5px; border: none; background: #007bff; color: white; margin: 5px; }
+        button { padding: 15px 30px; cursor: pointer; border-radius: 8px; border: none; background: #4285f4; color: white; font-size: 16px; }
         .admin-btn { background: #dc3545; color: white; padding: 5px; border-radius: 3px; border: none; cursor: pointer; }
     </style>
 </head>
 <body>
 
     <div id="auth-ui">
-        <h3>تسجيل الدخول في SafeRoad</h3>
-        <input type="tel" id="phone" placeholder="+967xxxxxxxxx" style="padding: 10px; width: 80%; max-width: 300px;">
-        <div id="recaptcha-container"></div>
-        <br>
-        <button id="send-otp">إرسال كود التحقق</button>
-        <div id="otp-area" class="hidden">
-            <input type="text" id="otp-code" placeholder="أدخل كود التفعيل" style="padding: 10px; margin-top: 10px;">
-            <br>
-            <button id="verify-otp" style="margin-top: 10px; background: #28a745;">تأكيد الدخول</button>
-        </div>
+        <h3>مرحباً بك في SafeRoad</h3>
+        <p>الرجاء تسجيل الدخول للمتابعة</p>
+        <button id="google-login">تسجيل الدخول عبر Google</button>
     </div>
 
     <div id="map-ui" class="hidden">
@@ -52,37 +45,26 @@
         
         const auth = firebase.auth();
         const db = firebase.firestore();
-        const ADMIN_PHONE = "+967771349957"; 
+        const ADMIN_EMAIL = "your-email@gmail.com"; // [تنبيه]: ضع بريدك الإلكتروني هنا لتصبح أدمن
         
         let localReports = []; 
         const lastAlertedTimes = new Map();
 
-        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 'size': 'invisible' });
-
-        document.getElementById('send-otp').onclick = () => {
-            auth.signInWithPhoneNumber(document.getElementById('phone').value, window.recaptchaVerifier)
-            .then(confirmationResult => {
-                window.confirmationResult = confirmationResult;
-                document.getElementById('otp-area').classList.remove('hidden');
-                alert("تم إرسال الكود!");
-            }).catch(e => alert("خطأ: " + e.message));
-        };
-
-        document.getElementById('verify-otp').onclick = () => {
-            window.confirmationResult.confirm(document.getElementById('otp-code').value)
-            .then(() => location.reload())
-            .catch(() => alert("كود خاطئ!"));
+        // تسجيل الدخول بـ Google
+        document.getElementById('google-login').onclick = () => {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider).catch(e => alert("خطأ في تسجيل الدخول: " + e.message));
         };
 
         auth.onAuthStateChanged(user => {
             if (user) {
                 document.getElementById('auth-ui').classList.add('hidden');
                 document.getElementById('map-ui').classList.remove('hidden');
-                initMap(user.phoneNumber);
+                initMap(user.email);
             }
         });
 
-        function initMap(userPhone) {
+        function initMap(userEmail) {
             const map = L.map('map').setView([15.3694, 44.1910], 12);
             L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png').addTo(map);
 
@@ -92,7 +74,7 @@
                     const data = doc.data();
                     localReports.push({ id: doc.id, ...data });
                     const marker = L.marker([data.location.latitude, data.location.longitude]).addTo(map);
-                    if (userPhone === ADMIN_PHONE) {
+                    if (userEmail === ADMIN_EMAIL) {
                         marker.bindPopup(`<b>${data.type}</b><br><button class="admin-btn" onclick="deleteReport('${doc.id}')">حذف</button>`);
                     }
                 });
@@ -104,7 +86,7 @@
                         type: "حادث/عائق",
                         location: { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
                         timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                    }).then(() => alert("تم الإبلاغ!"));
+                    });
                 });
             };
 
