@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SafeRoad Pro</title>
-    <!-- تحميل مكتبات Firebase -->
+    <!-- تحميل مكتبات الخريطة و Firebase -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
@@ -41,7 +41,7 @@
     </div>
 
     <script>
-        // إعداد Firebase الخاص بك
+        // إعداد Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyDwFAzkfJ1-67tuUkGPk7RJno1JJsHAfJc",
             authDomain: "saferoad-dc91b.firebaseapp.com",
@@ -54,7 +54,8 @@
         
         const auth = firebase.auth();
         const db = firebase.firestore();
-        const ADMIN_PHONE = "+967xxxxxxxxx"; // **[هام]: ضع رقم هاتفك الدولي هنا للأدمن**
+        const ADMIN_PHONE = "+967771349957"; // [تنبيه]: ضع رقم هاتفك الدولي هنا
+        let localReports = []; 
 
         // 1. نظام تسجيل الدخول
         window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 'size': 'invisible' });
@@ -64,7 +65,6 @@
             auth.signInWithPhoneNumber(phone, window.recaptchaVerifier).then(confirmationResult => {
                 window.confirmationResult = confirmationResult;
                 document.getElementById('otp-area').classList.remove('hidden');
-                alert("تم إرسال كود التحقق!");
             }).catch(e => alert("خطأ: " + e.message));
         };
 
@@ -74,7 +74,7 @@
             }).catch(e => alert("كود خاطئ!"));
         };
 
-        // 2. التحقق من حالة الدخول وعرض الخريطة
+        // 2. التحقق من الدخول
         auth.onAuthStateChanged(user => {
             if (user) {
                 document.getElementById('auth-ui').classList.add('hidden');
@@ -83,44 +83,54 @@
             }
         });
 
-        // 3. الخريطة والتنبيهات
+        // 3. الخريطة والمنطق
         function initMap(userPhone) {
             const map = L.map('map').setView([15.3694, 44.1910], 12);
             L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png').addTo(map);
 
-            // جلب البلاغات
+            // جلب البلاغات وتخزينها محلياً
             db.collection("reports").onSnapshot(snap => {
+                localReports = [];
                 snap.forEach(doc => {
                     const data = doc.data();
+                    localReports.push({ id: doc.id, ...data });
                     const marker = L.marker([data.location.latitude, data.location.longitude]).addTo(map);
                     
-                    // زر الحذف للأدمن فقط
                     if (userPhone === ADMIN_PHONE) {
                         marker.bindPopup(`<b>${data.type}</b><br><button class="admin-btn" onclick="deleteReport('${doc.id}')">حذف البلاغ</button>`);
                     }
                 });
             });
 
-            // تتبع المستخدم والتنبيه
+            // تفعيل زر الإبلاغ
+            document.getElementById('report-btn').onclick = () => {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    db.collection("reports").add({
+                        type: "حادث/عائق",
+                        location: { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    }).then(() => alert("تم الإبلاغ بنجاح!"));
+                });
+            };
+
+            // مراقبة الموقع للتنبيه
             navigator.geolocation.watchPosition(pos => {
                 const lat = pos.coords.latitude;
                 const lng = pos.coords.longitude;
                 
-                db.collection("reports").get().then(snap => {
-                    snap.forEach(doc => {
-                        const r = doc.data().location;
-                        const dist = Math.sqrt(Math.pow(r.latitude-lat, 2) + Math.pow(r.longitude-lng, 2)) * 111000;
-                        if (dist < 500) {
-                            new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play();
-                        }
-                    });
+                localReports.forEach(r => {
+                    const dist = Math.sqrt(Math.pow(r.location.latitude-lat, 2) + Math.pow(r.location.longitude-lng, 2)) * 111000;
+                    if (dist < 500 && !r.alerted) {
+                        r.alerted = true; 
+                        new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play();
+                        alert("⚠️ تحذير: عائق قريب منك!");
+                    }
                 });
             }, null, { enableHighAccuracy: true });
         }
 
-        // دالة الحذف للأدمن
         window.deleteReport = (id) => {
-            if(confirm("هل تريد حذف هذا البلاغ؟")) {
+            if(confirm("حذف البلاغ؟")) {
                 db.collection("reports").doc(id).delete().then(() => location.reload());
             }
         };
